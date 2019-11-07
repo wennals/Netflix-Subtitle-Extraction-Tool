@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        Netflix - subtitle downloader
+// @name        Netflix - subtitle downloader-Dev
 // @description Allows you to download subtitles from Netflix
 // @license     MIT
 // @version     3.0.5
@@ -21,6 +21,9 @@ const DOWNLOAD_MENU = `<lh class="list-header">Netflix subtitle downloader</lh>
 <li class="track download">Download subs for this episode</li>
 <li class="track download-all">Download subs from this ep till last available</li>`;
 
+// Add menu for language selection
+let LANGUAGE_MENU ='<lh id="langaugePicker" class="list-header">Subtitle Language Picker</lh>';
+
 const SCRIPT_CSS = `.player-timed-text-tracks, .track-list-subtitles{ border-right:1px solid #000 }
 .player-timed-text-tracks+.player-timed-text-tracks, .track-list-subtitles+.track-list-subtitles{ border-right:0 }
 #player-menu-track-settings .subtitle-downloader-menu li.list-header,
@@ -41,14 +44,14 @@ const randomProperty = obj => {
 };
 
 // get show name or full name with episode number
-const __getTitle = full => {
-  if(typeof full === 'undefined')
-    full = true;
+const __getTitle = fullTitle => {
+  if(typeof fullTitle === 'undefined')
+    fullTitle = true;
   const titleElement = document.querySelector(MAIN_TITLE);
   if(titleElement === null)
     return null;
   const title = [titleElement.textContent.replace(/[:*?"<>|\\\/]+/g, '_').replace(/ /g, '.')];
-  if(full) {
+  if(fullTitle) {
     const episodeElement = titleElement.nextElementSibling;
     if(episodeElement) {
       const m = episodeElement.textContent.match(/^[^\d]*?(\d+)[^\d]*?(\d+)?[^\d]*?$/);
@@ -90,12 +93,17 @@ const processSubInfo = async result => {
     const lang = track.language + type + (track.isForcedNarrative ? '-forced' : '');
     subs[lang] = randomProperty(track.ttDownloadables[WEBVTT].downloadUrls);
   }
-  subCache[result.movieId] = {titleP, subs};
-
+    subCache[result.movieId] = {titleP, subs};
+for (let language in subs) {
+LANGUAGE_MENU += `<li class="${language}">${language}</li>`;
+              }
+console.log(LANGUAGE_MENU);
   if(batch) {
     downloadAll();
   }
 };
+
+const getAvailableSubs = () => {processSubInfo.subs};
 
 const getMovieID = () => window.location.pathname.split('/').pop();
 
@@ -105,14 +113,16 @@ const _save = async (_zip, title) => {
   saveAs(content, title + '.zip');
 };
 
-const _download = async _zip => {
+const _download = async (language, _zip) => {
   const showTitle = getTitle(false);
   const {titleP, subs} = subCache[getMovieID()];
   const downloaded = [];
   for(const [lang, url] of Object.entries(subs)) {
+    if(lang == language){
     const result = await fetch(url, {mode: "cors"});
     const data = await result.text();
     downloaded.push({lang, data});
+    }
   }
   const title = await titleP;
 
@@ -124,16 +134,17 @@ const _download = async _zip => {
   return await showTitle;
 };
 
-const downloadThis = async () => {
+const downloadThis = async (language) => {
+  4
   const _zip = new JSZip();
-  const showTitle = await _download(_zip);
+  const showTitle = await _download(language,_zip);
   _save(_zip, showTitle);
 };
 
-const downloadAll = async () => {
+const downloadAll = async (language) => {
   zip = zip || new JSZip();
   batch = true;
-  const showTitle = await _download(zip);
+  const showTitle = await _download(zip, language);
   const nextEp = document.querySelector(NEXT_EPISODE);
   if(nextEp)
     nextEp.click();
@@ -184,6 +195,9 @@ document.head.appendChild(s);
 
 // add menu when it's not there
 const observer = new MutationObserver(function(mutations) {
+    for (let language in processSubInfo.subs) {
+        console.log("observer: ", language);
+    }
   mutations.forEach(function(mutation) {
     mutation.addedNodes.forEach(function(node) {
       if(node.nodeName.toUpperCase() == 'DIV') {
@@ -195,9 +209,24 @@ const observer = new MutationObserver(function(mutations) {
           trackMenu.appendChild(ol);
           ol.querySelector('.download').addEventListener('click', downloadThis);
           ol.querySelector('.download-all').addEventListener('click', downloadAll);
+            if(trackMenu.querySelector('.subtitle-language-menu') === null) {
+              let languageOptions = document.createElement('ol');
+              languageOptions.setAttribute('class', 'subtitle-language-menu player-timed-text-tracks track-list track-list-subtitles');
+              languageOptions.innerHTML = LANGUAGE_MENU;
+              trackMenu.appendChild(languageOptions);
+              const list = languageOptions.getElementsByTagName('LI');
+
+                for(let item of list){
+                    let language = item.innerHTML;
+                    languageOptions.querySelector(`.${language}`).addEventListener('click',() => {downloadThis(`${language}`)});
+                }
+            }
         }
       }
     });
   });
 });
 observer.observe(document.body, { childList: true, subtree: true });
+
+
+
