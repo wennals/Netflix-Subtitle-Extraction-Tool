@@ -13,6 +13,7 @@
 const MAIN_TITLE = '.player-status-main-title, .ellipsize-text>h4, .video-title>h4';
 const TRACK_MENU = '#player-menu-track-settings, .audio-subtitle-controller';
 const NEXT_EPISODE = '.player-next-episode:not(.player-hidden), .button-nfplayerNextEpisode';
+let LANGUAGE = '';
 
 const WEBVTT = 'webvtt-lssdh-ios8';
 
@@ -50,7 +51,7 @@ const __getTitle = fullTitle => {
   const titleElement = document.querySelector(MAIN_TITLE);
   if(titleElement === null)
     return null;
-  const title = [titleElement.textContent.replace(/[:*?"<>|\\\/]+/g, '_').replace(/ /g, '.')];
+  const title = [titleElement.textContent.replace(/[:*?"<>|\\\/]+/g, '_').replace(/ /g, ' ')];
   if(fullTitle) {
     const episodeElement = titleElement.nextElementSibling;
     if(episodeElement) {
@@ -62,7 +63,6 @@ const __getTitle = fullTitle => {
           title.push(`S${m[1].padStart(2, '0')}E${m[2].padStart(2, '0')}`);
       }
     }
-    title.push('WEBRip.Netflix');
   }
   return title.join('.');
 };
@@ -97,54 +97,49 @@ const processSubInfo = async result => {
 for (let language in subs) {
 LANGUAGE_MENU += `<li class="${language}">${language}</li>`;
               }
-console.log(LANGUAGE_MENU);
   if(batch) {
     downloadAll();
   }
 };
-
-const getAvailableSubs = () => {processSubInfo.subs};
 
 const getMovieID = () => window.location.pathname.split('/').pop();
 
 
 const _save = async (_zip, title) => {
   const content = await _zip.generateAsync({type:'blob'});
-  saveAs(content, title + '.zip');
+  saveAs(content, title + '.zip')
 };
 
-const _download = async (language, _zip) => {
+const _download = async (_zip) => {
   const showTitle = getTitle(false);
-  const {titleP, subs} = subCache[getMovieID()];
+  const titleP = subCache[getMovieID()].titleP;
+  const subtitleUrl = subCache[getMovieID()].subs[LANGUAGE];
   const downloaded = [];
-  for(const [lang, url] of Object.entries(subs)) {
-    if(lang == language){
-    const result = await fetch(url, {mode: "cors"});
-    const data = await result.text();
-    downloaded.push({lang, data});
-    }
-  }
+  const result = await fetch(subtitleUrl, {mode: "cors"});
+  let data = await result.text();
+  let temp = data.replace(/(WEBVTT)\n{1,}(NOTE.+\n){1,}\n{1,}(NOTE.+\n){1,}(\W){1,}/m,'').replace(/(^\d.*)/gm,'').replace(/<\/*i*(c.bg_transparent)*>/g,'').trim();
+  downloaded.push({LANGUAGE, temp});
   const title = await titleP;
 
   downloaded.forEach(x => {
-    const {lang, data} = x;
-    _zip.file(`${title}.${lang}.vtt`, data);
+    const {LANGUAGE, temp} = x;
+    _zip.file(`${title}.${LANGUAGE}.txt`, temp);
   });
 
   return await showTitle;
 };
 
-const downloadThis = async (language) => {
+const downloadThis = async () => {
   4
   const _zip = new JSZip();
-  const showTitle = await _download(language,_zip);
+  const showTitle = await _download(_zip);
   _save(_zip, showTitle);
 };
 
-const downloadAll = async (language) => {
+const downloadAll = async () => {
   zip = zip || new JSZip();
   batch = true;
-  const showTitle = await _download(zip, language);
+  const showTitle = await _download(zip);
   const nextEp = document.querySelector(NEXT_EPISODE);
   if(nextEp)
     nextEp.click();
@@ -213,12 +208,17 @@ const observer = new MutationObserver(function(mutations) {
               let languageOptions = document.createElement('ol');
               languageOptions.setAttribute('class', 'subtitle-language-menu player-timed-text-tracks track-list track-list-subtitles');
               languageOptions.innerHTML = LANGUAGE_MENU;
+              languageOptions.style.listStyleType = "none";
               trackMenu.appendChild(languageOptions);
               const list = languageOptions.getElementsByTagName('LI');
-
-                for(let item of list){
+                if(list != null){
+                    for(let item of list){
                     let language = item.innerHTML;
-                    languageOptions.querySelector(`.${language}`).addEventListener('click',() => {downloadThis(`${language}`)});
+                    languageOptions.querySelector(`.${language}`).addEventListener('click',() => {
+                        languageOptions.querySelector(`.${language}`).style.backgroundColor = "grey";
+                        LANGUAGE = `${language}`
+                    });
+                    }
                 }
             }
         }
